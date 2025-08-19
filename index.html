@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Chatbot — Perplexity Style</title>
+  <style>
+    /* Reset & basics */
+    body, html {
+      margin: 0;
+      height: 100%;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f0f3f5;
+      color: #1b1b1f;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 0 12px;
+    }
+    #chat-container {
+      background-color: #fff;
+      width: 100%;
+      max-width: 600px;
+      height: 85vh;
+      border-radius: 12px;
+      box-shadow: 0 8px 20px rgb(0 0 0 / 0.15);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #chat-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid #e3e6eb;
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #222;
+      user-select:none;
+      background: #fbfcfd;
+    }
+    #chat-box {
+      flex-grow: 1;
+      padding: 20px 24px;
+      overflow-y: auto;
+      scroll-behavior: smooth;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      background-color: #fbfcfd;
+    }
+    .message {
+      max-width: 80%;
+      word-wrap: break-word;
+      font-size: 1rem;
+      line-height: 1.4;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
+      padding: 14px 18px;
+      user-select: text;
+      white-space: pre-wrap;
+    }
+    .message.user {
+      background-color: #0b74ff;
+      color: white;
+      align-self: flex-end;
+      border-bottom-right-radius: 4px;
+    }
+    .message.bot {
+      background-color: #e6ebf2;
+      color: #1b1b1f;
+      align-self: flex-start;
+      border-bottom-left-radius: 4px;
+    }
+    #input-area {
+      display: flex;
+      gap: 14px;
+      padding: 12px 20px;
+      border-top: 1px solid #e3e6eb;
+      background: #fff;
+    }
+    #user-input {
+      flex-grow: 1;
+      font-size: 1rem;
+      padding: 14px 18px;
+      border-radius: 25px;
+      border: 1.8px solid #dedede;
+      outline-offset: 2px;
+      transition: border-color 0.2s ease;
+    }
+    #user-input:focus {
+      border-color: #0b74ff;
+      outline: none;
+      box-shadow: 0 0 8px rgb(11 116 255 / 0.35);
+    }
+    #send-btn {
+      background-color: #0b74ff;
+      border: none;
+      border-radius: 25px;
+      color: white;
+      font-weight: 600;
+      font-size: 1rem;
+      padding: 0 20px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select:none;
+    }
+    #send-btn:disabled {
+      background-color: #a1c1ff;
+      cursor: not-allowed;
+    }
+    #send-btn:hover:not(:disabled) {
+      background-color: #0958cc;
+    }
+    /* Scrollbar for chat-box */
+    #chat-box::-webkit-scrollbar {
+      width: 8px;
+    }
+    #chat-box::-webkit-scrollbar-thumb {
+      background-color: #bfc7d6;
+      border-radius: 4px;
+    }
+
+    /* Responsive */
+    @media (max-width: 400px) {
+      #chat-container {
+        height: 90vh;
+      }
+      #chat-header {
+        font-size: 1.15rem;
+        padding: 12px 16px;
+      }
+      #input-area {
+        padding: 10px 16px;
+      }
+      #user-input {
+        font-size: 0.95rem;
+        padding: 12px 14px;
+      }
+      #send-btn {
+        font-size: 0.95rem;
+        padding: 0 16px;
+      }
+      .message {
+        max-width: 90%;
+        font-size: 0.95rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div id="chat-container" role="main" aria-label="AI chatbot interface">
+  <header id="chat-header">Ask me anything</header>
+  <div id="chat-box" aria-live="polite" aria-atomic="false"></div>
+  <form id="input-area" aria-label="User input form">
+    <input type="text" id="user-input" autocomplete="off" aria-label="Type your message here" placeholder="Type your message..." required />
+    <button type="submit" id="send-btn" aria-label="Send message">Send</button>
+  </form>
+</div>
+
+<script>
+  const chatBox = document.getElementById('chat-box');
+  const userInput = document.getElementById('user-input');
+  const sendBtn = document.getElementById('send-btn');
+  const inputForm = document.getElementById('input-area');
+
+  function appendMessage(text, sender) {
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'message ' + (sender === 'user' ? 'user' : 'bot');
+    msgDiv.textContent = text;
+    chatBox.appendChild(msgDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }
+
+  // Using Hugging Face's GPT-2 public inference API (no auth)
+  const API_URL = "https://api-inference.huggingface.co/models/gpt2";
+
+  async function getBotReply(message) {
+    try {
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+          // No auth token here; limited quota and slower response expected
+        },
+        body: JSON.stringify({
+          inputs: message,
+          options: { wait_for_model: true }
+        }),
+      });
+      if (!response.ok) {
+        throw new Error("API error: " + response.status);
+      }
+      const data = await response.json();
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      const generated = data[0].generated_text;
+      // Remove user input part from response to get chatbot answer (simple slice)
+      let reply = generated.substring(message.length).trim();
+      if (!reply || reply.length < 3) {
+        reply = "Sorry, I didn't understand that.";
+      }
+      return reply;
+    } catch (error) {
+      return "Sorry, something went wrong. Please try again later.";
+    }
+  }
+
+  inputForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const message = userInput.value.trim();
+    if (!message) return;
+
+    appendMessage(message, 'user');
+    userInput.value = '';
+    sendBtn.disabled = true;
+
+    const reply = await getBotReply(message);
+    appendMessage(reply, 'bot');
+
+    sendBtn.disabled = false;
+    userInput.focus();
+  });
+
+  // For accessibility: focus input on page load
+  window.addEventListener('load', () => {
+    userInput.focus();
+  });
+</script>
+
+</body>
+</html>
